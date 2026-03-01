@@ -3,81 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>מפתח פה - אתגר ה-MIDI</title>
+    <title>מפתח פה - Landscape MIDI</title>
     
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#e74c3c">
-
     <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
     
     <style>
         body { 
-            font-family: system-ui, -apple-system, sans-serif; 
+            font-family: system-ui, sans-serif; 
             background: #1a1a1a; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            justify-content: flex-start; 
-            min-height: 100vh; 
             margin: 0; 
             color: white; 
-            touch-action: manipulation; 
+            overflow: hidden; /* מונע גלילה מיותרת במסך שוכב */
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
         }
-        .container { 
-            background: white; 
-            padding: 15px; 
-            border-radius: 20px; 
-            text-align: center; 
-            color: #333; 
-            width: 95%; 
-            max-width: 500px; 
-            margin-top: 15px; 
-            box-sizing: border-box; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
-        }
-        
-        #staff-output { width: 100%; height: 130px; margin: 0 auto; }
-        
-        #timer-display { 
-            font-size: 3.5rem; 
-            font-weight: bold; 
-            color: #e74c3c; 
-            margin: 5px 0; 
-            line-height: 1; 
-        }
-        .timer-off { visibility: hidden; }
 
-        /* עיצוב הפסנתר */
+        /* הגדרות למצב שוכב */
+        .game-area {
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            align-items: center;
+            flex: 1;
+            padding: 10px;
+        }
+
+        .stats-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 15px;
+            min-width: 150px;
+        }
+
+        .staff-container {
+            background: white;
+            border-radius: 15px;
+            padding: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+        }
+
+        #staff-output {
+            width: 300px;
+            height: 150px;
+        }
+
+        #timer-display { 
+            font-size: 3rem; 
+            font-weight: bold; 
+            color: #ff4757; 
+        }
+
+        /* פסנתר בתחתית המסך */
         .piano-wrapper { 
             position: relative; 
             width: 100%; 
-            height: 160px; 
-            margin: 15px auto; 
+            height: 140px; 
             background: #222; 
-            padding: 2px; 
-            border-radius: 5px; 
             user-select: none; 
+            border-top: 4px solid #444;
         }
+        
         .white-key { 
             position: absolute; 
-            width: 12.5%; 
-            height: 150px; 
+            width: 7.69%; /* 100 / 13 קלידים */
+            height: 100%; 
             background: white; 
             border: 1px solid #000; 
             border-radius: 0 0 5px 5px; 
             z-index: 1; 
-            display: flex; 
-            align-items: flex-end; 
-            justify-content: center; 
-            padding-bottom: 5px; 
-            font-size: 10px; 
-            color: #999; 
-            box-sizing: border-box; 
+            box-sizing: border-box;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            color: #999;
+            font-size: 12px;
+            padding-bottom: 5px;
         }
+        
         .black-key { 
             position: absolute; 
-            width: 8%; 
-            height: 95px; 
+            width: 5%; 
+            height: 60%; 
             background: black; 
             border-radius: 0 0 3px 3px; 
             z-index: 2; 
@@ -85,73 +96,55 @@
             box-sizing: border-box; 
         }
 
-        /* צבעים לתגובה */
         .correct { background: #2ecc71 !important; }
         .wrong { background: #e74c3c !important; }
         
-        #score-display { font-size: 1.4em; font-weight: bold; margin-bottom: 2px; }
-        #high-score-display { font-size: 0.9em; color: #7f8c8d; margin-bottom: 8px; }
         #midi-status { 
-            font-size: 0.75em; 
-            color: #27ae60; 
-            font-weight: bold; 
-            margin-top: 5px; 
-            padding: 4px 10px; 
-            background: #f0fdf4; 
-            border-radius: 10px; 
-            display: inline-block; 
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            font-size: 10px;
+            color: #2ecc71;
         }
-        
-        .toggle-btn { 
-            padding: 10px 20px; 
-            font-size: 14px; 
-            font-weight: bold; 
-            border-radius: 10px; 
-            border: none; 
-            cursor: pointer; 
-            background: #e74c3c; 
-            color: white; 
-            margin-bottom: 10px; 
-            transition: 0.2s;
+
+        .toggle-btn {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
         }
-        .timer-disabled { background: #3498db; }
-        #msg { font-weight: bold; height: 20px; color: #333; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <button id="mode-btn" class="toggle-btn" onclick="toggleTimer()">מצב: הישרדות (5 שנ')</button>
-    
-    <div id="score-display">ניקוד: <span id="score">0</span></div>
-    <div id="high-score-display">שיא אישי: <span id="high-score">0</span></div>
-    
-    <div id="timer-display">5</div>
-    
-    <div id="staff-output"></div>
-    
-    <div id="msg">טוען...</div>
-    <div id="midi-status">מחפש חיבור MIDI...</div>
+    <div id="midi-status">MIDI מחפש...</div>
+
+    <div class="game-area">
+        <div class="stats-panel">
+            <div id="score-display">ניקוד: <span id="score">0</span></div>
+            <div id="high-score-display">שיא: <span id="high-score">0</span></div>
+            <div id="timer-display">5</div>
+            <button id="mode-btn" class="toggle-btn" onclick="toggleTimer()">מצב אימון</button>
+        </div>
+
+        <div class="staff-container">
+            <div id="staff-output"></div>
+        </div>
+    </div>
+
+    <div id="msg" style="text-align: center; font-weight: bold; padding: 5px;"></div>
 
     <div class="piano-wrapper" id="piano"></div>
-</div>
 
 <script>
-// --- 1. רישום PWA ---
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js').catch(() => {});
-    });
-}
-
-// --- 2. הגדרות ומשתנים ---
 const { Renderer, Stave, StaveNote, Voice, Formatter, Accidental } = Vex.Flow;
 let score = 0, highScore = localStorage.getItem('pianoHighScore') || 0;
 let currentNoteKey = "", canClick = true, countdownInterval, timeLeft = 5, isTimerEnabled = true;
 
 document.getElementById('high-score').innerText = highScore;
 
-// מיפוי MIDI למפתח פה (F2 עד F3)
 const midiMap = {
     41: "F/2", 42: "F#/2", 43: "G/2", 44: "G#/2", 45: "A/2", 46: "A#/2", 47: "B/2",
     48: "C/3", 49: "C#/3", 50: "D/3", 51: "D#/3", 52: "E/3", 53: "F/3"
@@ -159,21 +152,20 @@ const midiMap = {
 
 const allNotes = [
     { name: "F", oct: 2, type: "white", left: 0 },
-    { name: "F#", oct: 2, type: "black", left: 8.5 },
-    { name: "G", oct: 2, type: "white", left: 12.5 },
-    { name: "G#", oct: 2, type: "black", left: 21 },
-    { name: "A", oct: 2, type: "white", left: 25 },
-    { name: "A#", oct: 2, type: "black", left: 33.5 },
-    { name: "B", oct: 2, type: "white", left: 37.5 },
-    { name: "C", oct: 3, type: "white", left: 50 },
-    { name: "C#", oct: 3, type: "black", left: 58.5 },
-    { name: "D", oct: 3, type: "white", left: 62.5 },
-    { name: "D#", oct: 3, type: "black", left: 71 },
-    { name: "E", oct: 3, type: "white", left: 75 },
-    { name: "F", oct: 3, type: "white", left: 87.5 }
+    { name: "F#", oct: 2, type: "black", left: 5.5 },
+    { name: "G", oct: 2, type: "white", left: 7.69 },
+    { name: "G#", oct: 2, type: "black", left: 13 },
+    { name: "A", oct: 2, type: "white", left: 15.38 },
+    { name: "A#", oct: 2, type: "black", left: 21 },
+    { name: "B", oct: 2, type: "white", left: 23.07 },
+    { name: "C", oct: 3, type: "white", left: 30.76 },
+    { name: "C#", oct: 3, type: "black", left: 36.5 },
+    { name: "D", oct: 3, type: "white", left: 38.45 },
+    { name: "D#", oct: 3, type: "black", left: 44 },
+    { name: "E", oct: 3, type: "white", left: 46.14 },
+    { name: "F", oct: 3, type: "white", left: 53.83 }
 ];
 
-// --- 3. בניית הממשק ---
 function createPiano() {
     const piano = document.getElementById('piano');
     allNotes.forEach(k => {
@@ -191,27 +183,30 @@ function drawNote() {
     canClick = true;
     const div = document.getElementById("staff-output");
     div.innerHTML = "";
+    
     const renderer = new Renderer(div, Renderer.Backends.SVG);
-    renderer.resize(div.clientWidth, 130);
+    renderer.resize(300, 150);
     const context = renderer.getContext();
-    const stave = new Stave(10, 10, div.clientWidth - 20);
+    context.setFillStyle("black");
+    context.setStrokeStyle("black");
+
+    const stave = new Stave(10, 20, 280);
     stave.addClef("bass").setContext(context).draw();
 
     const randomNote = allNotes[Math.floor(Math.random() * allNotes.length)];
     currentNoteKey = `${randomNote.name}/${randomNote.oct}`;
+    
     const note = new StaveNote({ clef: "bass", keys: [currentNoteKey], duration: "q" });
     if (randomNote.name.includes("#")) note.addModifier(new Accidental("#"));
     
-    new Formatter().joinVoices([new Voice({ num_beats: 1, beat_value: 4 }).addTickables([note])]).format([note], 50);
-    note.setContext(context).draw();
+    const voice = new Voice({ num_beats: 1, beat_value: 4 });
+    voice.addTickables([note]);
+    new Formatter().joinVoices([voice]).format([voice], 150);
+    voice.draw(context, stave);
     
-    document.getElementById('msg').innerText = "זהה את התו!";
-    document.getElementById('msg').style.color = "#333";
-
     if (isTimerEnabled) startCountdown();
 }
 
-// --- 4. ניהול זמן וניקוד ---
 function startCountdown() {
     timeLeft = 5;
     document.getElementById('timer-display').innerText = timeLeft;
@@ -221,77 +216,50 @@ function startCountdown() {
         document.getElementById('timer-display').innerText = timeLeft;
         if (timeLeft <= 0) {
             clearInterval(countdownInterval);
-            if (canClick) resetGame("נגמר הזמן!");
+            if (canClick) resetGame("זמן!");
         }
     }, 1000);
 }
 
 function handleInput(guess, el) {
     if (!canClick || !el) return;
-    
     if (guess === currentNoteKey) {
-        canClick = false; 
-        clearInterval(countdownInterval);
+        canClick = false; clearInterval(countdownInterval);
         el.classList.add('correct');
         score += 10;
         document.getElementById('score').innerText = score;
-        
         if (score > highScore) { 
-            highScore = score; 
-            localStorage.setItem('pianoHighScore', highScore); 
+            highScore = score; localStorage.setItem('pianoHighScore', highScore); 
             document.getElementById('high-score').innerText = highScore; 
         }
-        
-        setTimeout(() => { 
-            el.classList.remove('correct'); 
-            drawNote(); 
-        }, 500);
+        setTimeout(() => { el.classList.remove('correct'); drawNote(); }, 400);
     } else {
         el.classList.add('wrong');
-        setTimeout(() => el.classList.remove('wrong'), 300);
+        setTimeout(() => el.classList.remove('wrong'), 200);
         if (isTimerEnabled) resetGame("טעות!");
     }
 }
 
-function resetGame(reason) {
-    canClick = false; 
-    clearInterval(countdownInterval);
-    score = 0; 
-    document.getElementById('score').innerText = score;
-    document.getElementById('msg').innerText = reason + " הניקוד התאפס";
-    document.getElementById('msg').style.color = "#e74c3c";
-    
-    setTimeout(() => {
-        drawNote();
-    }, 1500);
+function resetGame(msg) {
+    canClick = false; clearInterval(countdownInterval);
+    score = 0; document.getElementById('score').innerText = score;
+    document.getElementById('msg').innerText = msg;
+    setTimeout(() => { document.getElementById('msg').innerText = ""; drawNote(); }, 1000);
 }
 
 function toggleTimer() {
     isTimerEnabled = !isTimerEnabled;
-    const btn = document.getElementById('mode-btn');
-    const timerText = document.getElementById('timer-display');
-    clearInterval(countdownInterval);
-    
-    if (isTimerEnabled) {
-        btn.innerText = "מצב: הישרדות (5 שנ')";
-        btn.classList.remove("timer-disabled");
-        timerText.classList.remove('timer-off');
-        drawNote();
-    } else {
-        btn.innerText = "מצב: אימון (ללא זמן)";
-        btn.classList.add("timer-disabled");
-        timerText.classList.add('timer-off');
-    }
+    document.getElementById('timer-display').style.opacity = isTimerEnabled ? "1" : "0.2";
+    drawNote();
 }
 
-// --- 5. חיבור MIDI ---
 if (navigator.requestMIDIAccess) {
     navigator.requestMIDIAccess().then(access => {
-        document.getElementById('midi-status').innerText = "MIDI מחובר ומוכן!";
+        document.getElementById('midi-status').innerText = "MIDI מחובר";
         access.inputs.forEach(input => {
             input.onmidimessage = (m) => {
                 const [cmd, note, vel] = m.data;
-                if (cmd === 144 && vel > 0) { // לחיצה על קליד
+                if (cmd === 144 && vel > 0) {
                     const noteName = midiMap[note];
                     if (noteName) {
                         const n = allNotes.find(x => `${x.name}/${x.oct}` === noteName);
@@ -304,10 +272,8 @@ if (navigator.requestMIDIAccess) {
     });
 }
 
-// התחלה
 createPiano();
 drawNote();
-
 </script>
 </body>
 </html>
