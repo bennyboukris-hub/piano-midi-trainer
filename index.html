@@ -1,1 +1,239 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>מפתח פה - תצוגת צד</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
+    
+    <style>
+        body { 
+            font-family: system-ui, sans-serif; 
+            background: #0a0a0a; 
+            margin: 0; 
+            color: white; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
 
+        /* מכולה ראשית שמסדרת הכל בשורה אחת */
+        .game-layout {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 30px;
+            width: 95%;
+        }
+
+        /* עמודות הסטטיסטיקה בצדדים */
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            min-width: 100px;
+        }
+
+        .stat-item {
+            background: rgba(255,255,255,0.05);
+            padding: 15px;
+            border-radius: 15px;
+            text-align: center;
+            border: 1px solid #222;
+        }
+
+        /* אזור התווים במרכז */
+        .center-panel {
+            text-align: center;
+        }
+
+        .staff-container {
+            background: white;
+            padding: 20px;
+            border-radius: 25px;
+            box-shadow: 0 15px 50px rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #vexflow-canvas { 
+            width: 380px; 
+            height: 200px; 
+        }
+
+        .label { font-size: 0.75rem; color: #aaa; margin-bottom: 5px; text-transform: uppercase; }
+        .value { font-size: 2.5rem; font-weight: bold; line-height: 1; }
+        
+        #timer { color: #ff4757; }
+        #score { color: #2ecc71; }
+        #high-score { color: #f1c40f; }
+
+        #msg {
+            margin-top: 15px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #3498db;
+            min-height: 1.5em;
+        }
+
+        /* אפקטי רקע */
+        .success-bg { background: #0c2b18 !important; transition: 0.2s; }
+        .error-bg { background: #3b0d0d !important; transition: 0.2s; }
+
+        /* התאמה למסך צר מאוד (אם מסובבים חזרה למאונך) */
+        @media (max-aspect-ratio: 1/1) {
+            .game-layout { flex-direction: column; gap: 10px; }
+            .side-panel { flex-direction: row; width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body id="bg">
+
+    <div class="game-layout">
+        
+        <div class="side-panel">
+            <div class="stat-item">
+                <div class="label">ניקוד</div>
+                <div id="score" class="value">0</div>
+            </div>
+            <div class="stat-item">
+                <div class="label">שיא</div>
+                <div id="high-score" class="value">0</div>
+            </div>
+        </div>
+
+        <div class="center-panel">
+            <div class="staff-container">
+                <div id="vexflow-canvas"></div>
+            </div>
+            <div id="msg">זהה את התו</div>
+        </div>
+
+        <div class="side-panel">
+            <div class="stat-item">
+                <div class="label">זמן</div>
+                <div id="timer" class="value">5</div>
+            </div>
+        </div>
+
+    </div>
+
+<script>
+const { Renderer, Stave, StaveNote, Voice, Formatter, Accidental } = Vex.Flow;
+
+let currentScore = 0;
+let highScore = localStorage.getItem('pianoHighScore') || 0;
+let activeNoteObj = null;
+let timeLeft = 5;
+let timerId;
+let isProcessing = false;
+
+document.getElementById('high-score').innerText = highScore;
+
+const noteRange = [
+    { key: "F/2", m: 41, acc: false }, { key: "F#/2", m: 42, acc: true },
+    { key: "G/2", m: 43, acc: false }, { key: "G#/2", m: 44, acc: true },
+    { key: "A/2", m: 45, acc: false }, { key: "A#/2", m: 46, acc: true },
+    { key: "B/2", m: 47, acc: false }, { key: "C/3", m: 48, acc: false },
+    { key: "C#/3", m: 49, acc: true }, { key: "D/3", m: 50, acc: false },
+    { key: "D#/3", m: 51, acc: true }, { key: "E/3", m: 52, acc: false },
+    { key: "F/3", m: 53, acc: false }
+];
+
+function nextQuestion() {
+    isProcessing = false;
+    const canvas = document.getElementById("vexflow-canvas");
+    canvas.innerHTML = "";
+    
+    const renderer = new Renderer(canvas, Renderer.Backends.SVG);
+    renderer.resize(380, 200);
+    const context = renderer.getContext();
+    const stave = new Stave(40, 40, 300);
+    stave.addClef("bass").setContext(context).draw();
+
+    activeNoteObj = noteRange[Math.floor(Math.random() * noteRange.length)];
+
+    const vNote = new StaveNote({ clef: "bass", keys: [activeNoteObj.key], duration: "q" });
+    if (activeNoteObj.acc) vNote.addModifier(new Accidental("#"));
+
+    Formatter.FormatAndDraw(context, stave, [vNote]);
+    
+    timeLeft = 5;
+    document.getElementById('timer').innerText = timeLeft;
+    startCountdown();
+}
+
+function startCountdown() {
+    clearInterval(timerId);
+    timerId = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer').innerText = timeLeft;
+        if (timeLeft <= 0) {
+            handleHit(false, "נגמר הזמן!");
+        }
+    }, 1000);
+}
+
+function handleHit(isCorrect, text) {
+    if (isProcessing) return;
+    isProcessing = true;
+    clearInterval(timerId);
+
+    const bg = document.getElementById('bg');
+    const msg = document.getElementById('msg');
+
+    if (isCorrect) {
+        currentScore += 10;
+        msg.innerText = "נכון! ✨";
+        msg.style.color = "#2ecc71";
+        bg.classList.add('success-bg');
+        
+        if (currentScore > highScore) {
+            highScore = currentScore;
+            localStorage.setItem('pianoHighScore', highScore);
+            document.getElementById('high-score').innerText = highScore;
+        }
+    } else {
+        currentScore = 0;
+        msg.innerText = text || "טעות! ❌";
+        msg.style.color = "#ff4757";
+        bg.classList.add('error-bg');
+    }
+
+    document.getElementById('score').innerText = currentScore;
+
+    setTimeout(() => {
+        bg.classList.remove('success-bg', 'error-bg');
+        msg.innerText = "זהה את התו";
+        msg.style.color = "#3498db";
+        nextQuestion();
+    }, 600);
+}
+
+// הגדרות MIDI
+if (navigator.requestMIDIAccess) {
+    navigator.requestMIDIAccess().then(midi => {
+        midi.inputs.forEach(input => {
+            input.onmidimessage = (e) => {
+                const [status, note, vel] = e.data;
+                if (status === 144 && vel > 0) {
+                    if (activeNoteObj && note === activeNoteObj.m) {
+                        handleHit(true);
+                    } else {
+                        handleHit(false);
+                    }
+                }
+            };
+        });
+    });
+}
+
+window.onload = nextQuestion;
+</script>
+</body>
+</html>
