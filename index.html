@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>מפתח פה - אימון MIDI בלבד</title>
+    <title>MIDI Debug Trainer</title>
     
     <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js"></script>
     
     <style>
         body { 
             font-family: system-ui, sans-serif; 
-            background: #121212; 
+            background: #0a0a0a; 
             margin: 0; 
             color: white; 
             display: flex;
@@ -19,93 +19,72 @@
             justify-content: center;
             height: 100vh;
             overflow: hidden;
+            transition: border 0.1s;
+            border: 5px solid transparent; /* למשוב ויזואלי */
         }
 
-        /* כותרת סטטוס MIDI */
-        #midi-info {
+        #status-container {
             position: absolute;
-            top: 10px;
-            font-size: 0.9rem;
-            padding: 5px 15px;
-            border-radius: 20px;
-            background: #222;
-            border: 1px solid #444;
-        }
-
-        /* אזור התצוגה הראשי */
-        .main-display {
+            top: 15px;
             text-align: center;
-            width: 90%;
-            max-width: 600px;
+            background: #1a1a1a;
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: 1px solid #333;
         }
 
-        /* החמשה - גדולה וברורה */
-        .staff-paper {
+        #midi-status { color: #ff4757; font-weight: bold; }
+        #last-midi-note { color: #eccc68; font-family: monospace; font-size: 0.9rem; margin-top: 5px; }
+
+        .staff-box {
             background: white;
-            padding: 20px;
-            border-radius: 20px;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.7);
-            display: inline-block;
+            padding: 30px;
+            border-radius: 25px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9);
             margin-bottom: 20px;
         }
 
-        #staff-output {
-            width: 400px;
-            height: 200px;
-        }
+        #vexflow-canvas { width: 450px; height: 200px; }
 
-        /* נתוני משחק */
-        .game-stats {
+        .stats-row {
             display: flex;
-            justify-content: center;
             gap: 40px;
-            margin-top: 20px;
-        }
-
-        .stat-box {
             background: rgba(255,255,255,0.05);
-            padding: 15px 25px;
-            border-radius: 15px;
-            min-width: 100px;
+            padding: 15px 30px;
+            border-radius: 20px;
         }
 
-        .label { font-size: 0.8rem; color: #888; text-transform: uppercase; margin-bottom: 5px; }
-        .value { font-size: 2.5rem; font-weight: bold; }
-        #timer-display { color: #ff4757; }
-        #score { color: #2ecc71; }
+        .stat-value { font-size: 2.5rem; font-weight: bold; text-align: center; }
+        #current-timer { color: #ff4757; }
+        #current-score { color: #2ecc71; }
 
-        #msg {
-            height: 30px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-
-        /* אנימציה להצלחה/טעות */
-        .flash-correct { background: rgba(46, 204, 113, 0.2) !important; transition: 0.2s; }
-        .flash-wrong { background: rgba(231, 76, 60, 0.2) !important; transition: 0.2s; }
+        /* אפקטים של הבהוב */
+        .midi-flash { border-color: #eccc68 !important; } /* הבהוב צהוב כשמתקבל סיגנל */
+        .success-bg { background: #062006 !important; }
+        .error-bg { background: #200606 !important; }
     </style>
 </head>
-<body id="game-body">
+<body id="main-bg">
 
-    <div id="midi-info">מחפש פסנתר MIDI...</div>
+    <div id="status-container">
+        <div id="midi-status">ממתין לחיבור...</div>
+        <div id="last-midi-note">לחץ על קליד בפסנתר לבדיקה</div>
+    </div>
 
-    <div class="main-display">
-        <div id="msg">חבר את הפסנתר והתחל לנגן</div>
+    <div id="feedback-msg" style="margin-bottom: 15px; font-size: 1.2rem;"></div>
 
-        <div class="staff-paper">
-            <div id="staff-output"></div>
+    <div class="staff-box">
+        <div id="vexflow-canvas"></div>
+    </div>
+
+    <div class="stats-row">
+        <div class="stat-item">
+            <div style="font-size: 0.7rem; color: #666;">ניקוד</div>
+            <div id="current-score" class="stat-value">0</div>
         </div>
-
-        <div class="game-stats">
-            <div class="stat-box">
-                <div class="label">ניקוד</div>
-                <div id="score" class="value">0</div>
-            </div>
-            <div class="stat-box">
-                <div class="label">זמן נותר</div>
-                <div id="timer-display" class="value">5</div>
-            </div>
+        <div class="stat-item">
+            <div style="font-size: 0.7rem; color: #666;">זמן</div>
+            <div id="current-timer" class="stat-value">5</div>
         </div>
     </div>
 
@@ -113,113 +92,117 @@
 const { Renderer, Stave, StaveNote, Voice, Formatter, Accidental } = Vex.Flow;
 
 let score = 0;
-let currentNoteData = null;
-let timeLeft = 5;
-let timer;
-let canPlay = true;
+let activeNote = null;
+let secondsLeft = 5;
+let gameTimer;
+let isPaused = true;
 
-const notes = [
-    { name: "F/2", midi: 41, hasAcc: false },
-    { name: "F#/2", midi: 42, hasAcc: true },
-    { name: "G/2", midi: 43, hasAcc: false },
-    { name: "G#/2", midi: 44, hasAcc: true },
-    { name: "A/2", midi: 45, hasAcc: false },
-    { name: "A#/2", midi: 46, hasAcc: true },
-    { name: "B/2", midi: 47, hasAcc: false },
-    { name: "C/3", midi: 48, hasAcc: false },
-    { name: "C#/3", midi: 49, hasAcc: true },
-    { name: "D/3", midi: 50, hasAcc: false },
-    { name: "D#/3", midi: 51, hasAcc: true },
-    { name: "E/3", midi: 52, hasAcc: false },
-    { name: "F/3", midi: 53, hasAcc: false }
+const noteList = [
+    { key: "F/2", m: 41, acc: false }, { key: "F#/2", m: 42, acc: true },
+    { key: "G/2", m: 43, acc: false }, { key: "G#/2", m: 44, acc: true },
+    { key: "A/2", m: 45, acc: false }, { key: "A#/2", m: 46, acc: true },
+    { key: "B/2", m: 47, acc: false }, { key: "C/3", m: 48, acc: false },
+    { key: "C#/3", m: 49, acc: true }, { key: "D/3", m: 50, acc: false },
+    { key: "D#/3", m: 51, acc: true }, { key: "E/3", m: 52, acc: false },
+    { key: "F/3", m: 53, acc: false }
 ];
 
-function draw() {
-    canPlay = true;
-    const div = document.getElementById("staff-output");
-    div.innerHTML = "";
-    
-    const renderer = new Renderer(div, Renderer.Backends.SVG);
-    renderer.resize(400, 200);
+function renderNewNote() {
+    isPaused = false;
+    const target = document.getElementById("vexflow-canvas");
+    target.innerHTML = "";
+    const renderer = new Renderer(target, Renderer.Backends.SVG);
+    renderer.resize(450, 200);
     const context = renderer.getContext();
-    
-    const stave = new Stave(50, 40, 300);
+    const stave = new Stave(75, 40, 300);
     stave.addClef("bass").setContext(context).draw();
 
-    currentNoteData = notes[Math.floor(Math.random() * notes.length)];
-
-    const note = new StaveNote({ clef: "bass", keys: [currentNoteData.name], duration: "q" });
-    if (currentNoteData.hasAcc) note.addModifier(new Accidental("#"));
-
-    Formatter.FormatAndDraw(context, stave, [note]);
+    activeNote = noteList[Math.floor(Math.random() * noteList.length)];
+    const vNote = new StaveNote({ clef: "bass", keys: [activeNote.key], duration: "q" });
+    if (activeNote.acc) vNote.addModifier(new Accidental("#"));
+    Formatter.FormatAndDraw(context, stave, [vNote]);
+    
     startTimer();
 }
 
 function startTimer() {
-    timeLeft = 5;
-    document.getElementById('timer-display').innerText = timeLeft;
-    clearInterval(timer);
-    timer = setInterval(() => {
-        timeLeft--;
-        document.getElementById('timer-display').innerText = timeLeft;
-        if (timeLeft <= 0) {
-            handleResult(false, "נגמר הזמן!");
-        }
+    secondsLeft = 5;
+    document.getElementById('current-timer').innerText = secondsLeft;
+    clearInterval(gameTimer);
+    gameTimer = setInterval(() => {
+        secondsLeft--;
+        document.getElementById('current-timer').innerText = secondsLeft;
+        if (secondsLeft <= 0) finalize(false, "נגמר הזמן!");
     }, 1000);
 }
 
-function handleResult(isCorrect, message) {
-    if (!canPlay) return;
-    canPlay = false;
-    clearInterval(timer);
+function finalize(correct, txt) {
+    if (isPaused) return;
+    isPaused = true;
+    clearInterval(gameTimer);
 
-    const body = document.getElementById('game-body');
-    const msgEl = document.getElementById('msg');
+    const bg = document.getElementById('main-bg');
+    const msg = document.getElementById('feedback-msg');
 
-    if (isCorrect) {
+    if (correct) {
         score += 10;
-        msgEl.innerText = "נכון! ✨";
-        msgEl.style.color = "#2ecc71";
-        body.classList.add('flash-correct');
+        msg.innerText = "נכון!";
+        msg.style.color = "#2ecc71";
+        bg.classList.add('success-bg');
     } else {
         score = 0;
-        msgEl.innerText = message || "טעות!";
-        msgEl.style.color = "#ff4757";
-        body.classList.add('flash-wrong');
+        msg.innerText = txt || "טעות!";
+        msg.style.color = "#ff4757";
+        bg.classList.add('error-bg');
     }
-
-    document.getElementById('score').innerText = score;
+    document.getElementById('current-score').innerText = score;
 
     setTimeout(() => {
-        body.classList.remove('flash-correct', 'flash-wrong');
-        draw();
-    }, 800);
+        bg.classList.remove('success-bg', 'error-bg');
+        renderNewNote();
+    }, 700);
 }
 
-// לוגיקת MIDI
+// --- לוגיקת MIDI ודיבאג ---
 if (navigator.requestMIDIAccess) {
-    navigator.requestMIDIAccess().then(access => {
-        document.getElementById('midi-info').innerText = "פסנתר MIDI מחובר ✅";
-        document.getElementById('midi-info').style.color = "#2ecc71";
+    navigator.requestMIDIAccess().then(midi => {
+        document.getElementById('midi-status').innerText = "פסנתר MIDI מחובר ✅";
+        document.getElementById('midi-status').style.color = "#2ecc71";
         
-        access.inputs.forEach(input => {
-            input.onmidimessage = (m) => {
-                const [cmd, note, vel] = m.data;
-                // פקודה 144 זה Note On
-                if (cmd === 144 && vel > 0) {
-                    if (currentNoteData && note === currentNoteData.midi) {
-                        handleResult(true);
+        midi.inputs.forEach(input => {
+            input.onmidimessage = (msg) => {
+                const [status, note, velocity] = msg.data;
+                
+                // אינדיקציה לכל לחיצה (אפילו אם לא התו הנכון)
+                if (status === 144 && velocity > 0) {
+                    // הבהוב צהוב למסגרת
+                    document.body.classList.add('midi-flash');
+                    setTimeout(() => document.body.classList.remove('midi-flash'), 100);
+                    
+                    // הצגת מספר התו שנלחץ
+                    document.getElementById('last-midi-note').innerText = "נלחץ תו מספר: " + note;
+
+                    // בדיקה אם זה התו הנכון למשחק
+                    if (activeNote && note === activeNote.m) {
+                        finalize(true);
                     } else {
-                        handleResult(false, "תו לא נכון!");
+                        // אם נלחץ תו אבל הוא לא בטווח של המשחק
+                        if (!noteList.find(n => n.m === note)) {
+                            document.getElementById('feedback-msg').innerText = "תו מחוץ לטווח (F2-F3)";
+                            document.getElementById('feedback-msg').style.color = "#eccc68";
+                        } else {
+                            finalize(false, "תו לא נכון!");
+                        }
                     }
                 }
             };
         });
     });
+} else {
+    document.getElementById('midi-status').innerText = "הדפדפן לא תומך ב-MIDI ❌";
 }
 
-// התחלה
-window.onload = draw;
+window.onload = renderNewNote;
 </script>
 </body>
 </html>
